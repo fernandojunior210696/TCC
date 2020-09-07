@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1584294312381.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3250543350",
+    "id" : "2A063F58",
+    "lastKnownWriteTime" : 1584305707,
+    "last_content_update" : 1584305707590,
+    "path" : "~/Desktop/TCC/3.EDA.R",
+    "project_path" : "3.EDA.R",
+    "properties" : {
+        "cursorPosition" : "183,0",
+        "scrollLine" : "176",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

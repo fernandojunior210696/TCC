@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1584295498540.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "359930D6",
+    "lastKnownWriteTime" : 4294967302,
+    "last_content_update" : 1584295498540,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "FCFB1D7",
+        "caption" : "all_songs",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=all_songs&cache_key=FCFB1D7",
+        "displayedObservations" : 71283,
+        "environment" : "",
+        "object" : "all_songs",
+        "preview" : 0,
+        "totalObservations" : 71283,
+        "variables" : 19
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}
