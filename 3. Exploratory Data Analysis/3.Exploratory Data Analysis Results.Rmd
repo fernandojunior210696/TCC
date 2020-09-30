@@ -3,8 +3,8 @@ title: "Exploratory Data Analysis"
 author: "Fernando de Oliveira Junior"
 date: "3/15/2020"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -19,9 +19,11 @@ library(corrplot)
 library(zoo)
 library(psych)
 
+setwd("~/Desktop/TCC")
+
 # read databases
-all_songs <- read_csv('features.csv')
-most_popular <- read_csv('most_popular.csv')
+all_songs <- read_csv('2.Datasets/features.csv')
+most_popular <- read_csv('2.Datasets/most_popular.csv')
 
 # encode factors features
 all_songs$time_signature %<>% as.factor()
@@ -237,3 +239,136 @@ ano_mes_pop %>%
 corrplot(cor(ano_mes_pop[, sapply(ano_mes_pop, is.numeric)]), method = "number")
 ```
 
+---
+
+> From 7 we can observe that, on average, each month has 307 songs at the top 200 raking.  
+
+### 7. How many popular (Top 200) songs are there each month?
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+qnt_monthly_pop <- monthly_pop %>%
+  group_by(ano_mes) %>%
+  summarise(count = n()) 
+
+qnt_monthly_pop %>%
+  ggplot()+
+  geom_density(aes(x = count, y = ..count..), 
+           fill = "#2980b9")+
+  theme_minimal()+
+  geom_vline(aes(xintercept = mean(qnt_monthly_pop$count)))+
+  annotate(geom = "text",
+           x = mean(qnt_monthly_pop$count)+13,
+           y = 1,
+           label = paste0("Média: ", round(mean(qnt_monthly_pop$count), 3)))+
+  labs(title = "Distribution of Songs in Each Month",
+       subtitle = "Most Pop Songs (since Jan 2017)",
+       x = "Count",
+       y = "")
+```
+
+---
+
+> From 8.1, there are some outliers and the distribuition is assimetrical for the amount of days a song remains at the top 200 ranking
+
+### 8.1. How many days a song remain at the top 200?
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+qnt_days_pop <- most_popular %>%
+  group_by(id) %>%
+  summarise(count = n()) 
+
+qnt_days_pop %>%
+  ggplot()+
+  geom_density(aes(x = count, y = ..count..), 
+               fill = "#2980b9")+
+  theme_minimal()+
+  geom_vline(aes(xintercept = mean(qnt_days_pop$count)))+
+  annotate(geom = "text",
+           x = mean(qnt_days_pop$count)+13,
+           y = 40,
+           label = paste0("Média: ", round(mean(qnt_days_pop$count), 3)))+
+  labs(title = "Distribution of Days a Song Remains at the Top 200",
+       subtitle = "Most Pop Songs (since Jan 2017)",
+       x = "Count",
+       y = "")
+```
+
+> From 8.2, we are going to drop observations above the percentil 97% (387 days)
+
+### 8.2. Analysing distribuition in order to remove outliers
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+qnt_days_pop$count %>% 
+  quantile(probs = c(seq(0, 0.75, 0.25), seq(0.9, 1, 0.01)))
+
+qnt_days_pop %<>%
+  filter(count < 387) 
+```
+
+> From 8.3, we can observe that the distribuition is very assimetrical. There are lots of songs with few days in top 200 and a few songs with a lot of days in the top 200 ranking
+
+### 8.3. Analysing the distribuition without outliers
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+qnt_days_pop %>%
+  ggplot()+
+  geom_density(aes(x = count, y = ..count..), 
+               fill = "#2980b9")+
+  theme_minimal()+
+  geom_vline(aes(xintercept = mean(qnt_days_pop$count)),
+             color = '#8e44ad')+
+  geom_vline(aes(xintercept = median(qnt_days_pop$count)),
+             color = '#27ae60')+
+  annotate(geom = "text",
+           x = mean(qnt_days_pop$count)+23,
+           y = 40,
+           label = paste0("Média: ", round(mean(qnt_days_pop$count), 3)),
+           color = '#8e44ad')+
+  annotate(geom = "text",
+           x = median(qnt_days_pop$count)+23,
+           y = 30,
+           label = paste0("Mediana: ", round(median(qnt_days_pop$count), 3)),
+           color = '#27ae60')+
+  labs(title = "Distribution of Days a Song Remains at the Top 200",
+       subtitle = "Most Pop Songs (since Jan 2017)",
+       x = "Count",
+       y = "")
+```
+
+---
+
+> From 9, we can see that there are, on average, 132 songs remaning popular in each month, so we could define our monthly songs to be clustered as the songs that remain on top.
+
+### 9. How many songs remain at the top 200 each month?
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+most_popular$days_in_month <- days_in_month(most_popular$mes)
+
+songs_remaining <- most_popular %>%
+  group_by(id, ano_mes, days_in_month) %>%
+  summarise(days = n()) %>%
+  filter(days_in_month == days)
+
+monthly_remaining <- songs_remaining %>%
+  group_by(ano_mes) %>%
+  summarise(songs = n())
+
+monthly_remaining %>%
+  select(songs) %>%
+  summary()
+```
+
+---
+
+> From 10, we can see that the median release date for all songs is around 2017 while the songs that were popular (top 200) has the median value around 2018. It's important to address this discussion if we are going to select only songs that were released after 2017
+
+### 10. When were songs released, considering both the populars and all other songs?
+
+### 10.1 All Songs
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+all_songs %>% 
+  select(track.album.release_date) %>% 
+  summary()
+```
+
+### 10.2 Popular Songs
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+songs_pop %>% 
+  select(track.album.release_date) %>% 
+  summary()
+```
