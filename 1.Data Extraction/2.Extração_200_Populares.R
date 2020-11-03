@@ -7,8 +7,20 @@ library(spotifyr)
 library(magrittr)
 library(lubridate)
 
+# settings
+setwd("~/Desktop/TCC")
+
+# Client ID (get on spotify web api site for you)
+Sys.setenv(SPOTIFY_CLIENT_ID = "3a341a4b68a243478346541d2efd4c9c")
+
+# Client secret (get on spotify web api site for you)
+Sys.setenv(SPOTIFY_CLIENT_SECRET = "0ba44167c53f4e5db45d7bef4302cd93")
+
+# Generate authentication token
+access_token <- get_spotify_access_token()
+
 # Load database from script 1
-musics_features <- read_csv("features.csv")
+musics_features <- read_csv('2.Datasets/features.csv')
 
 # create range of date by one day since 01/01/2017
 dates <- seq(ymd('2017-01-01'),ymd('2020-03-13'), 
@@ -47,7 +59,7 @@ backup <- df
 
 # select only important columns
 df %<>%
-  select(c("date", "ano", "mes", "id"))
+  select(c("date", "ano", "mes", "id", "Position"))
 
 # get the features for the songs
 df %<>% 
@@ -92,10 +104,10 @@ no_match <- no_match_features %>%
 
 # add dates information
 no_match %<>%
-  left_join(df[1:4], by = "id")
+  left_join(df[1:5], by = "id")
 
 # adjust columns order
-no_match %<>% select(c("date", "ano", "mes",
+no_match %<>% select(c("date", "ano", "mes", "Position",
                        "id", "danceability", "energy", 
                       "key", "loudness",  "mode", "speechiness", 
                       "acousticness", "instrumentalness", 
@@ -116,4 +128,4 @@ most_popular %<>%
   arrange(date)
 
 # save database
-write_csv(most_popular, "most_popular.csv") 
+write_csv(most_popular, "2.Datasets/most_popular.csv") 

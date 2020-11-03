@@ -115,13 +115,13 @@ summary(most_popular)
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
 all_songs %>%
   ggplot()+
-  geom_histogram(aes(x = track.popularity, y = ..count..), 
+  geom_density(aes(x = track.popularity, y = ..count..), 
                  fill = "#2980b9")+
   theme_minimal()+ 
   geom_vline(aes(xintercept = mean(all_songs$track.popularity)))+
   annotate(geom = "text", 
            x = mean(all_songs$track.popularity)+13, 
-           y = 6000, 
+           y = 1600, 
            label = paste0("Média: ", round(mean(all_songs$track.popularity), 3)))+
   labs(title = "Distribution of Song Popularity Index",
        subtitle = "All songs",

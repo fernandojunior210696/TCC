@@ -189,5 +189,19 @@ while (n_musics < total) {
 musics_features %<>%
   left_join(album_df, by = "id")
 
+# let's bring songs name
+# loop to get features for songs
+names <- NULL
+
+for (id in all_songs$id) {
+  a <- get_track(id)$name
+  
+  try({names <- rbind(names, a)})
+  
+}
+
+a <- apply(matrix(all_songs$id, ncol=1), 1, get_track)
+
+
 # save database
 write_csv(musics_features, "features.csv") 
