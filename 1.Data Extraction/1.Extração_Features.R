@@ -10,6 +10,15 @@ library(tidyverse)
 library(spotifyr)
 library(magrittr)
 library(lubridate)
+library(foreach)
+library(doParallel)
+library(tcltk)
+
+
+#setup parallel backend to use many processors
+cores=detectCores()
+cl <- makeCluster(cores-1)
+registerDoParallel(cl)
 
 # Client ID (get on spotify web api site for you)
 Sys.setenv(SPOTIFY_CLIENT_ID = "3a341a4b68a243478346541d2efd4c9c")
@@ -21,13 +30,24 @@ Sys.setenv(SPOTIFY_CLIENT_SECRET = "0ba44167c53f4e5db45d7bef4302cd93")
 access_token <- get_spotify_access_token()
 
 # get all categories ids avaibles in Brazil
-categories = c("toplists","brazilian","sertanejo","inspirational",
-               "mood","popculture","pop","chill","party","rock",
-               "hiphop","edm_dance","indie_alt","workout","kpop",
-               "romance","sleep","family","dinner","focus","soul",
-               "travel","classical","rnb","decades","reggae","jazz",
-               "arab","afro","j_tracks","test_latin","desi","sessions",
-               "blues","punk","metal","roots","comedy","gaming")
+# categories = c("toplists","brazilian","sertanejo","inspirational",
+#                "mood","popculture","pop","chill","party","rock",
+#                "hiphop","edm_dance","indie_alt","workout","kpop",
+#                "romance","sleep","family","dinner","focus","soul",
+#                "travel","classical","rnb","decades","reggae","jazz",
+#                "arab","afro","j_tracks","test_latin","desi","sessions",
+#                "blues","punk","metal","roots","comedy","gaming")
+
+categories <- c('toplists','at_home','brazil','sertanejo','pop','blackhistorymonth',
+'radar','samba___pagode','pride','wellness','rock','hiphop','inspirational',
+'mpb','cities','edm_dance','indie_alt','latin','popculture','mood','party',
+'chill','romance','sleep','workout','focus','decades','rnb','kpop',
+'instrumental','jazz','classical','thirdparty','dinner','travel',
+'caribbean','family','soul','arab','afro','j_tracks','desi','sessions',
+'blues','punk','metal','roots','comedy','gaming')
+
+# number of categories
+length(categories)
 
 # loop to get all playlists inside a category
 playlists <- NULL
@@ -70,138 +90,153 @@ less_100 <- playlists %>% filter(tracks.total <= 100)
 more_100 <- playlists %>% filter(tracks.total > 100)
 
 # loop to get all songs inside a playlist (only less than 100)
-musics <- NULL
-
-for (id in less_100$id) {
+musics <- foreach(i=less_100$id, .combine=rbind) %dopar% {
   
-  try({a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))")
-  musics <- rbind(musics, a)})
-  
+  tempMatrix = spotifyr::get_playlist_tracks(i, fields=target_names)
+  if (ncol(tempMatrix)==6) {
+    tempMatrix
+  }
 }
 
 # loop to get all songs inside a playlist (only more than 100)
-greater <- NULL
-
-for (id in more_100$id) {
-  try({
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))")
-  greater <- rbind(greater, a)
+greater <- foreach(i=more_100$id, .combine=rbind) %dopar% {
   
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 100)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 200)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 300)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 400)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 500)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 600)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 700)
-  greater <- rbind(greater, a)
-  
-  
-  a <- get_playlist_tracks(id,
-                           fields = "items(track(id, popularity))",
-                           offset = 800)
-  greater <- rbind(greater, a)})
-  
+  tempMatrix_100 = spotifyr::get_playlist_tracks(i, fields=target_names)
+  tempMatrix_200 = spotifyr::get_playlist_tracks(i, fields=target_names, offset = 100)
+  tempMatrix_300 = spotifyr::get_playlist_tracks(i, fields=target_names, offset = 200)
+  tempMatrix_400 = spotifyr::get_playlist_tracks(i, fields=target_names, offset = 300)
+  tempMatrix_500 = spotifyr::get_playlist_tracks(i, fields=target_names, offset = 400)
+  tempMatrix_600 = spotifyr::get_playlist_tracks(i, fields=target_names, offset = 500)
+  # print(ncol(tempMatrix_100))
+  if (ncol(tempMatrix_100)==6) {
+    do.call("rbind", list(tempMatrix_100, tempMatrix_200, tempMatrix_300, 
+                          tempMatrix_400, tempMatrix_500, tempMatrix_600))
+  }
 }
 
 # consolidate all songs
 musics_id <- rbind(greater, musics)
 
-# get unique songs ids
-musics_id %<>%
+# get unique artists ids
+artists <- bind_rows(musics_id$track.artists)
+artists %<>% unique()
+
+# artists
+
+# define progress bar for artists followers loop
+pb = txtProgressBar(min = 0, max = length(seq(0,nrow(artists), 50)), initial = 0, style = 3) 
+
+# get followers
+artists_followers <- NULL
+n=0
+for (i in seq(0,nrow(artists), 50)) {
+  n <- n+1
+  setTxtProgressBar(pb,n)
+  try({
+    start=1+i
+    end=50+i
+    tempMatrix <- spotifyr::get_artists(artists$id[start:end])[c('id', 'followers.total')]
+    artists_followers <- rbind(artists_followers, tempMatrix)
+  })
+  
+}
+close(pb)
+
+# get followers for last artists
+start=54150
+end=nrow(artists)
+tempMatrix <- spotifyr::get_artists(artists$id[start:end])[c('id', 'followers.total')]
+artists_followers <- rbind(artists_followers, tempMatrix)
+
+# unique artists followers
+artists_followers %<>%
   unique()
 
+# get from/to songs and artists
+library(data.table)
+musics_id %<>% unique()
+artists_songs <- mapply(cbind, musics_id$track.artists, "track.id"=musics_id$track.id, SIMPLIFY = F)
+artists_songs <- artists_songs[-12188]
+
+artists_songs <- data.table::rbindlist(artists_songs, fill=TRUE)
+
+# select only relevant columns
+artists_songs %<>%
+  select(c("track.id", "id"))
+
+# get followers
+artists_songs %<>% as_tibble()
+artists_followers %<>% as_tibble()
+
+artists_songs %<>% 
+  left_join(artists_followers, by = c("id"="id"))
+
+# songs info complete
+musics_id %<>%
+  as_tibble()
+
+musics_id %<>% 
+  left_join(artists_songs, by = c("track.id"="track.id"))
+
+# remove unwanted information
+musics_id %<>%
+  select(-c("track.artists", "id"))
+
+# unique songs
+musics_id %<>% unique()
+
+# average followers
+musics_id %<>%
+  group_by_at(setdiff(names(musics_id), "followers.total"))%>% 
+  summarise(followers_mean = mean(followers.total))
+
 # loop to get features for songs
-musics_features <- NULL
+# parallel
+cores=detectCores()
+cl <- makeCluster(cores)
+registerDoParallel(cl)
 
-for (id in musics_id$track.id) {
-  a <- get_track_audio_features(id)
-  
-  try({musics_features <- rbind(musics_features, a)})
-  
-}
+# define progress bar for artists followers loop
 
-# get popularity information for all songs
-musics_features %<>%
-  left_join(musics_id, by = c("id" = "track.id"))
+pb = txtProgressBar(min = 0, max = length(seq(0,nrow(musics_id), 100)), initial = 0, style = 3) 
 
-# select only important columns
-musics_features %<>%
-  select(c(13, 1:11, 17:19))
-
-# loop to get features from album
-album_df <- data.frame(id = character(),
-                       track.album.id = character(),
-                       track.album.release_date = character(),
-                       track.album.release_date_precision = character())
-done = 0
-total = musics_features %>% nrow()
-n_musics = 50
-
-while (n_musics < total) {
-  lista <- musics_features %>% slice((n_musics - 50) : n_musics) %>% select("id")
-  a <- get_tracks(lista$id[1:50])
-  n_musics = n_musics + 50
-  try({album_df %<>% add_row(id = a$id,
-                             track.album.id = a$album.id,
-                             track.album.release_date = a$album.release_date,
-                             track.album.release_date_precision = a$album.release_date_precision)})
-  print(round(done/(total/50),4))
-  done = done + 1
-}
-
-# join album information
-musics_features %<>%
-  left_join(album_df, by = "id")
-
-# let's bring songs name
-# loop to get features for songs
-names <- NULL
-
-for (id in all_songs$id) {
-  a <- get_track(id)$name
-  
-  try({names <- rbind(names, a)})
+songs_features <- NULL
+n=0
+for (i in seq(0,nrow(musics_id), 100)) {
+  n <- n+1
+  setTxtProgressBar(pb,n)
+  try({
+    start=1+i
+    end=100+i
+    tempMatrix <- spotifyr::get_track_audio_features(musics_id$track.id[start:end])
+    songs_features <- rbind(songs_features, cbind(musics_id$track.id[start:end], tempMatrix))
+  })
   
 }
+close(pb)
+stopCluster(cl)
 
-a <- apply(matrix(all_songs$id, ncol=1), 1, get_track)
+# get features for last songs
+start=94401
+end=nrow(musics_id)
+tempMatrix <- spotifyr::get_track_audio_features(musics_id$track.id[start:end])
+songs_features <- rbind(songs_features, cbind(musics_id$track.id[start:end], tempMatrix))
 
+songs_features %<>% 
+  as_tibble()
+
+songs_features %<>% rename(track.id = `musics_id$track.id[start:end]`)
+
+# join all info
+musics_features <- musics_id %>%
+  left_join(songs_features, by = "track.id")
+
+# delete unwanted features
+musics_features %<>% 
+  ungroup() %>%
+  select(-c("track.album.album_type", "type", "id", "uri", "track_href", "analysis_url"))
+
+musics_features$followers_mean %<>% as.integer()
 
 # save database
-write_csv(musics_features, "features.csv") 
+write_csv(musics_features, "2.Datasets/songs_features_v2.csv") 
