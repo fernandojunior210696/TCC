@@ -41,7 +41,7 @@ songs_pop <- most_popular %>%
 
 # select unique most popular songs monthly
 monthly_pop <- most_popular %>%
-  select(-c(date)) %>% 
+  select(-c(date, Position)) %>% 
   unique()
 
 # flag each song as pop or not based on today index
@@ -105,6 +105,18 @@ all_songs %>%
 
 # 2.1 Why are there songs with realy small values?
 # ???
+
+# 2.2 Is the distribuition close to normality?
+qqnorm(all_songs$track.popularity, pch = 1, frame = FALSE, 
+       main = "Q-Q Plot para normalidade",
+       xlab = "Quantis teóricos",
+       ylab = "Quantis da amostra")
+qqline(all_songs$track.popularity, 
+       col = "steelblue", 
+       lwd = 2, 
+       main = "Q-Q Plot para normalidade",
+       xlab = "Quantis teóricos",
+       ylab = "Quantis da amostra")
 
 # 3. How is the popularity distributed for the songs that were on the 200 charts at any moment since Jan 2017?
 songs_pop %>%
@@ -187,15 +199,6 @@ all_songs %>%
 
 # 5. Is there any correlations between song features and popularity index?
 
-# 5.0 teste
-library(psych)
-pairs.panels(all_songs[, sapply(all_songs, is.numeric)], 
-             method = "pearson", # correlation method
-             hist.col = "#00AFBB",
-             density = TRUE,  # show density plots
-             ellipses = TRUE # show correlation ellipses
-)
-
 # 5.1 For all songs
 corrplot(cor(all_songs[, sapply(all_songs, is.numeric)]), method = "number")
 
@@ -206,14 +209,19 @@ corrplot(cor(most_popular[, sapply(most_popular, is.numeric)]), method = "number
 # which makes sense, since popularity index is based on changeable parameters
 
 # 6. From 5, do the evolution of features for the most popular songs correlates with 
-# popularity over time? It would make sense, if the tast of people is changing over time
+# popularity over time? It would make sense, if the taste of people is changing over time
 
-# 6.1 How does popularity distribuition evolve for those songs?
+# 6.1 How does popularity distribution evolve for those songs?
 monthly_pop %>%
   ggplot()+
   geom_boxplot(aes(x = ano_mes, y = track.popularity))+
   theme_minimal()+
-  scale_x_discrete(breaks = levels(monthly_pop$ano_mes)[c(T, rep(F, 3))])
+  scale_x_discrete(breaks = levels(monthly_pop$ano_mes)[c(T, rep(F, 3))])+
+  labs(title = "Distribuição mensal do índice de popularidade",
+       subtitle = "Músicas populares a cada mês",
+       x = "Mês-Ano popular",
+       y = "Índice de popularidade")+
+  theme_minimal()
 
 ano_mes_pop %>%
   ggplot()+
@@ -274,45 +282,52 @@ qnt_days_pop %>%
            x = mean(qnt_days_pop$days_of_populatiry)+100,
            y = 49,
            label = paste0("Média: ", round(mean(qnt_days_pop$days_of_populatiry), 3)))+
-  labs(title = "Distribution of Days a Song Remains at the Top 200",
-       subtitle = "Most Pop Songs (since Jan 2017)",
-       x = "Count",
-       y = "")
+  geom_vline(aes(xintercept = median(days_of_populatiry)))+
+  annotate(geom = "text",
+           x = median(qnt_days_pop$days_of_populatiry)+100,
+           y = 20,
+           label = paste0("Mediano: ", round(median(qnt_days_pop$days_of_populatiry), 3)))+
+  labs(title = "Distribuição de dias que uma música permanece nas Top 200",
+       subtitle = "Músicas mais tocadas desde 2017",
+       x = "Dias",
+       y = "Densidade")+
+  theme_minimal()
 
 # From 8, there are some outliers and the distribuition is assimetrical
 
 # 8.1 Analysing distribuition in order to remove outliers
-qnt_days_pop$count %>% 
+qnt_days_pop$days_of_populatiry %>% 
   quantile(probs = c(seq(0, 0.75, 0.25), seq(0.9, 1, 0.01)))
 
 # From 8.1, we can remove observation above 97% (387)
 qnt_days_pop %<>%
-  filter(count < 387) 
+  filter(days_of_populatiry < 387) 
 
 # 8.2 Analysing the distribuition without outliers
 qnt_days_pop %>%
   ggplot()+
-  geom_density(aes(x = count, y = ..count..), 
+  geom_density(aes(x = days_of_populatiry, y = ..count..), 
                fill = "#2980b9")+
   theme_minimal()+
-  geom_vline(aes(xintercept = mean(qnt_days_pop$count)),
+  geom_vline(aes(xintercept = mean(qnt_days_pop$days_of_populatiry)),
              color = '#8e44ad')+
-  geom_vline(aes(xintercept = median(qnt_days_pop$count)),
+  geom_vline(aes(xintercept = median(qnt_days_pop$days_of_populatiry)),
              color = '#27ae60')+
   annotate(geom = "text",
-           x = mean(qnt_days_pop$count)+23,
+           x = mean(qnt_days_pop$days_of_populatiry)+23,
            y = 40,
-           label = paste0("Média: ", round(mean(qnt_days_pop$count), 3)),
+           label = paste0("Média: ", round(mean(qnt_days_pop$days_of_populatiry), 3)),
            color = '#8e44ad')+
   annotate(geom = "text",
-           x = median(qnt_days_pop$count)+23,
+           x = median(qnt_days_pop$days_of_populatiry)+23,
            y = 30,
-           label = paste0("Mediana: ", round(median(qnt_days_pop$count), 3)),
+           label = paste0("Mediana: ", round(median(qnt_days_pop$days_of_populatiry), 3)),
            color = '#27ae60')+
-  labs(title = "Distribution of Days a Song Remains at the Top 200",
-       subtitle = "Most Pop Songs (since Jan 2017)",
-       x = "Count",
-       y = "")
+  labs(title = "Distribuição de dias que uma música permanece nas Top 200",
+       subtitle = "Músicas mais tocadas desde 2017",
+       x = "Dias",
+       y = "Densidade")+
+  theme_minimal()
 
 # From 8.2, the distribuition is very assimetrical. There are lots of songs with few
 # days in top 200 and a few songs with a lot of days in the top 200 ranking
@@ -550,3 +565,10 @@ days_since_release_plot %>%
        subtitle = "Popular songs (200 Top)",
        x = "Days Since Release",
        y = "")
+
+# save dataset to clustering
+most_popular %>%
+  select(c(id, days_since_release, days_until_pop, days_from_pop_to_top, days_from_top_until_leave)) %>%
+  unique() %>%
+  write_csv("2.Datasets/clusterig_features.csv")
+
