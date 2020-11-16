@@ -140,6 +140,7 @@ names_songs <- foreach(i=no_match_features$id, .combine=rbind) %dopar% {
     
 }
 
+stopCluster(cl)
 
 names_songs %<>% 
   select(c("id", "name", "popularity", "album.release_date", "artists"))
