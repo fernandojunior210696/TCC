@@ -5,7 +5,7 @@ setwd("~/Desktop/TCC")
 
 # load required packages
 library(tidyverse)
-library(spotifyr)
+# library(spotifyr)
 library(magrittr)
 library(lubridate)
 library(corrplot)
@@ -13,8 +13,12 @@ library(zoo)
 library(psych)
 
 # read databases
-all_songs <- read_csv('2.Datasets/features.csv')
-most_popular <- read_csv('2.Datasets/most_popular.csv')
+all_songs <- read_csv('2.Datasets/songs_features_v2.csv')
+most_popular <- read_csv('2.Datasets/most_popular_v2.csv')
+
+# remove songs with problem in songs features
+all_songs <- all_songs[!is.na(all_songs$danceability),]
+most_popular <- most_popular[!is.na(most_popular$danceability),]
 
 # encode factors features
 all_songs$time_signature %<>% as.factor()
@@ -27,16 +31,29 @@ most_popular$key %<>% as.factor()
 
 # encode date features
 all_songs$track.album.release_date %<>% as.Date()
-
-most_popular$date %<>% as.Date()
 most_popular$track.album.release_date %<>% as.Date()
+
+# create age of songs
+all_songs$date_ref <- ymd('2020-11-15')
+most_popular$date_ref <- ymd('2020-11-15')
+
+# age of songs
+all_songs$days_since_release <- all_songs$date_ref-all_songs$track.album.release_date
+most_popular$days_since_release <- most_popular$date_ref-most_popular$track.album.release_date
+
+all_songs$days_since_release %<>% as.integer()
+most_popular$days_since_release %<>% as.integer()
+
+# rename most_popular date colum
+most_popular %<>% rename(c("date" = "data"))
+most_popular$date %<>% as.Date()
 
 most_popular$ano_mes <- as.yearmon(most_popular$date)
 most_popular$ano_mes %<>% factor(ordered = TRUE)
 
 # select unique most popular songs
 songs_pop <- most_popular %>%
-  select(-c(date, mes, ano, ano_mes)) %>% 
+  select(-c(date, mes, ano, ano_mes, Position)) %>% 
   unique()
 
 # select unique most popular songs monthly
@@ -46,11 +63,11 @@ monthly_pop <- most_popular %>%
 
 # flag each song as pop or not based on today index
 pop_today <- most_popular %>%
-  filter(date == '2020-03-13') 
+  filter(date == '2020-11-15') 
 
 pop_today$is_hit <- 1
 all_songs %<>%
-  left_join(pop_today[, c(4, 24)], by = "id")
+  left_join(pop_today[, c("track.id", "is_hit")], by = "track.id")
 
 all_songs %<>% mutate(is_hit = coalesce(is_hit, 0))
 
@@ -75,6 +92,52 @@ ano_mes_pop <- monthly_pop %>%
             tempo = mean(tempo),
             duration_ms = mean(duration_ms))
 
+# Days of popularity
+qnt_days_pop <- most_popular %>%
+  group_by(track.id) %>%
+  summarise(days_of_populatiry = n()) 
+
+most_popular %<>%
+  left_join(qnt_days_pop)
+
+# Days until pop
+min_pop_date <- most_popular %>%
+  group_by(track.id, track.album.release_date) %>%
+  summarise(pop_date = min(date))
+
+min_pop_date$days_until_pop <- min_pop_date$pop_date - min_pop_date$track.album.release_date
+
+most_popular %<>%
+  left_join(min_pop_date[c("track.id", "days_until_pop", "pop_date")])
+
+# Days from pop to top
+top_position <- most_popular %>%
+  select(c('date', 'track.id', 'Position')) %>%
+  group_by(track.id) %>%
+  summarise(position_max = min(Position))
+
+top_day <- most_popular %>%
+  select(c('date', 'track.id', 'Position')) %>%
+  left_join(top_position, by=c('track.id')) %>%
+  filter(Position==position_max) %>%
+  group_by(track.id, position_max) %>%
+  summarise(position_max_date = min(date))
+
+most_popular %<>%
+  left_join(top_day[c("track.id", "position_max_date")])
+
+most_popular$days_from_pop_to_top <- most_popular$position_max_date-most_popular$pop_date
+
+# Days from top until leave
+max_pop_date <- most_popular %>%
+  group_by(track.id) %>%
+  summarise(max_pop_date = max(date))
+
+most_popular %<>%
+  left_join(max_pop_date, by='track.id')
+
+most_popular$days_from_top_until_leave <-  most_popular$max_pop_date-most_popular$position_max_date
+
 # Questions to guide our EDA:
 # 1. How is the popularity index calculated?
   # The value will be between 0 and 100, with 100 being the most popular.
@@ -92,7 +155,7 @@ all_songs %>%
   geom_vline(aes(xintercept = mean(all_songs$track.popularity)))+
   annotate(geom = "text", 
            x = mean(all_songs$track.popularity)+13, 
-           y = 1600, 
+           y = 2400, 
            label = paste0("Média: ", round(mean(all_songs$track.popularity), 2)))+
   labs(title = "Distribuição do índice de popularidade",
        subtitle = "Todas as músicas",
@@ -156,14 +219,6 @@ pop_today %>%
 # these songs at the 200 chart have higher index value.
 # However, there are songs with realy low index
 
-# 3.2 Why are there songs with realy small values?
-pop_today %>% 
-  filter(track.popularity < 25) %>%
-  select(c(track.album.release_date))
-
-# From 3.2, we can see that those songs were released at the same day we extracted our 
-# data set. The amount of days the song was released could be correlated with popularity
-
 # 4. Can we compare, visually, the two distributions?
 hit_x <- round(mean(all_songs$track.popularity[all_songs$is_hit == "Hit"]), 2)
 no_hit_x <- round(mean(all_songs$track.popularity[all_songs$is_hit != "Hit"]), 2)
@@ -199,11 +254,12 @@ all_songs %>%
 
 # 5. Is there any correlations between song features and popularity index?
 
+
 # 5.1 For all songs
-corrplot(cor(all_songs[, sapply(all_songs, is.numeric)]), method = "number")
+corrplot(cor(all_songs[complete.cases(all_songs), sapply(all_songs, is.numeric)]), method = "number")
 
 # 5.2 For the most popular songs
-corrplot(cor(most_popular[, sapply(most_popular, is.numeric)]), method = "number")
+corrplot(cor(most_popular[complete.cases(most_popular), sapply(most_popular, is.numeric)]), method = "number")
 
 # Conclusion: There is no correlation between the features of the songs and popularity,
 # which makes sense, since popularity index is based on changeable parameters
@@ -265,11 +321,12 @@ qnt_monthly_pop %>%
   labs(title = "Distribution of Songs in Each Month",
        subtitle = "Most Pop Songs (since Jan 2017)",
        x = "Count",
-       y = "")
+       y = "")+
+  theme_minimal()
 
 # 8. How many days a song remain at the top 200?
 qnt_days_pop <- most_popular %>%
-  group_by(id) %>%
+  group_by(track.id) %>%
   summarise(days_of_populatiry = n()) 
 
 qnt_days_pop %>%
@@ -301,7 +358,7 @@ qnt_days_pop$days_of_populatiry %>%
 
 # From 8.1, we can remove observation above 97% (387)
 qnt_days_pop %<>%
-  filter(days_of_populatiry < 387) 
+  filter(days_of_populatiry < 406) 
 
 # 8.2 Analysing the distribuition without outliers
 qnt_days_pop %>%
@@ -316,11 +373,11 @@ qnt_days_pop %>%
   annotate(geom = "text",
            x = mean(qnt_days_pop$days_of_populatiry)+23,
            y = 40,
-           label = paste0("Média: ", round(mean(qnt_days_pop$days_of_populatiry), 3)),
+           label = paste0("Média: ", round(mean(qnt_days_pop$days_of_populatiry), 2)),
            color = '#8e44ad')+
   annotate(geom = "text",
            x = median(qnt_days_pop$days_of_populatiry)+23,
-           y = 30,
+           y = 50,
            label = paste0("Mediana: ", round(median(qnt_days_pop$days_of_populatiry), 3)),
            color = '#27ae60')+
   labs(title = "Distribuição de dias que uma música permanece nas Top 200",
@@ -336,7 +393,7 @@ qnt_days_pop %>%
 most_popular$days_in_month <- days_in_month(most_popular$mes)
 
 songs_remaining <- most_popular %>%
-  group_by(id, ano_mes, days_in_month) %>%
+  group_by(track.id, ano_mes, days_in_month) %>%
   summarise(days = n()) %>%
   filter(days_in_month == days)
 
@@ -401,7 +458,7 @@ songs_pop %>%
 
 # 11. How many days a song takes to become popular
 min_pop_date <- most_popular %>%
-  group_by(id, track.album.release_date) %>%
+  group_by(track.id, track.album.release_date) %>%
   summarise(pop_date = min(date))
 
 min_pop_date$days_until_pop <- min_pop_date$pop_date - min_pop_date$track.album.release_date
@@ -424,49 +481,46 @@ min_pop_date %>%
 # verifying outliers
 min_pop_date$days_until_pop %>% quantile(na.rm = TRUE, probs = c(0, 0.5, 0.9, 0.95, 0.99))
 
-min_pop_date %>% 
-  filter(days_until_pop > 0 & days_until_pop <= 1030) %>%
+min_pop_date %<>% 
+  filter(days_until_pop > 0 & days_until_pop <= 1443) 
+min_pop_date %>%
   ggplot()+
   geom_density(aes(x = days_until_pop), 
                fill = '#2980b9')+
   theme_minimal()+
-  geom_vline(aes(xintercept = mean(min_pop_date$days_until_pop, na.rm = T)))+
+  geom_vline(aes(xintercept = mean(min_pop_date$days_until_pop, na.rm = T)),
+             color = '#8e44ad')+
   annotate(geom = "text", 
            x = mean(min_pop_date$days_until_pop, na.rm = T)+100, 
-           y = 0.02, 
-           label = paste0("Média: ", mean(min_pop_date$days_until_pop, na.rm = T)))+
-  labs(title = "Distribution of Days Until Enter The Top 200",
-       subtitle = "Popular songs (200 Top)",
-       x = "Days Until Pop",
+           y = 0.015, 
+           label = paste0("Média: ", round(mean(min_pop_date$days_until_pop, na.rm = T), 2)),
+           color = '#8e44ad'
+           )+
+  geom_vline(aes(xintercept = median(min_pop_date$days_until_pop, na.rm = T)),
+             color = '#27ae60')+
+  annotate(geom = "text", 
+           x = median(min_pop_date$days_until_pop, na.rm = T)+100, 
+           y = 0.010, 
+           label = paste0("Mediana: ", round(median(min_pop_date$days_until_pop, na.rm = T), 3)),
+           color = '#27ae60')+
+  labs(title = "Distribuição de dias até entrar no top 200",
+       subtitle = "Músicas que foram populares (top 200)",
+       x = "Dias até a popularidade",
        y = "")
 
 # 12. How many days a song takes to go to the top position
 top_position <- most_popular %>%
-  select(c('date', 'id', 'Position')) %>%
-  group_by(id) %>%
+  select(c('date', 'track.id', 'Position')) %>%
+  group_by(track.id) %>%
   summarise(position_max = min(Position))
 
 top_day <- most_popular %>%
-  select(c('date', 'id', 'Position')) %>%
-  left_join(top_position, by=c('id')) %>%
+  select(c('date', 'track.id', 'Position')) %>%
+  left_join(top_position, by=c('track.id')) %>%
   filter(Position==position_max) %>%
-  group_by(id, position_max) %>%
+  group_by(track.id, position_max) %>%
   summarise(position_max_date = min(date))
 
-# most top pop day
-most_popular %<>%
-  left_join(top_day, by='id')
-
-# days until popularity
-min_pop_date %<>% select(-c('track.album.release_date'))
-most_popular %<>%
-  left_join(min_pop_date, by='id')
-
-# days of popularity
-most_popular %<>%
-  left_join(qnt_days_pop, by='id')
-
-most_popular$days_from_pop_to_top <- most_popular$position_max_date-most_popular$pop_date
 
 # plot distribuition
 days_from_pop_to_top_plot <- most_popular %>% 
@@ -477,26 +531,32 @@ days_from_pop_to_top_plot %>%
   geom_density(aes(x = days_from_pop_to_top), 
                fill = '#2980b9')+
   theme_minimal()+
-  geom_vline(aes(xintercept = mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)))+
+  geom_vline(aes(xintercept = mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)),
+             color = '#8e44ad')+
   annotate(geom = "text", 
-           x = mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)+100, 
+           x = mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)+70, 
+           y = 0.015, 
+           label = paste0("Média: ", round(mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T), 2)),
+           color = '#8e44ad'
+  )+
+  geom_vline(aes(xintercept = median(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)),
+             color = '#27ae60')+
+  annotate(geom = "text", 
+           x = median(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)+70, 
            y = 0.010, 
-           label = paste0("Média: ", mean(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T)))+
-  labs(title = "Distribution of days_from_pop_to_top",
-       subtitle = "Popular songs (200 Top)",
-       x = "Days Since Release",
+           label = paste0("Mediana: ", round(median(days_from_pop_to_top_plot$days_from_pop_to_top, na.rm = T), 3)),
+           color = '#27ae60')+
+  labs(title = "Distribuição de dias até o primeiro topo",
+       subtitle = "Músicas que foram populares (top 200)",
+       x = "Dias até o topo",
        y = "")
+  
 
 # 13. How many days a song takes to leave the 200 top chart?
 
 max_pop_date <- most_popular %>%
-  group_by(id) %>%
+  group_by(track.id) %>%
   summarise(max_pop_date = max(date))
-
-most_popular %<>%
-  left_join(max_pop_date, by='id')
-
-most_popular$days_from_top_until_leave <-  most_popular$max_pop_date-most_popular$position_max_date
 
 # plot distribuition
 days_top_leave_plot <- most_popular %>% 
@@ -507,25 +567,28 @@ days_top_leave_plot %>%
   geom_density(aes(x = days_from_top_until_leave), 
                fill = '#2980b9')+
   theme_minimal()+
-  geom_vline(aes(xintercept = mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T)))+
+  geom_vline(aes(xintercept = mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T)),
+           color = '#8e44ad')+
   annotate(geom = "text", 
-           x = mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T)+100, 
+           x = mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T)+70, 
+           y = 0.004, 
+           label = paste0("Média: ", round(mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T), 2)),
+           color = '#8e44ad'
+  )+
+  geom_vline(aes(xintercept = median(days_top_leave_plot$days_from_top_until_leave, na.rm = T)),
+             color = '#27ae60')+
+  annotate(geom = "text", 
+           x = median(days_top_leave_plot$days_from_top_until_leave, na.rm = T)+70, 
            y = 0.003, 
-           label = paste0("Média: ", mean(days_top_leave_plot$days_from_top_until_leave, na.rm = T)))+
-  labs(title = "Distribution of days_from_top_until_leave",
-       subtitle = "Popular songs (200 Top)",
-       x = "Days Since Release",
+           label = paste0("Mediana: ", round(median(days_top_leave_plot$days_from_top_until_leave, na.rm = T), 3)),
+           color = '#27ae60')+
+  labs(title = "Distribuição de dias do topo até sair do ranking",
+       subtitle = "Músicas que foram populares (top 200)",
+       x = "Quantidade de dias",
        y = "")
 
 # 14. How are age of songs distribuited
-all_songs$date_ref <- ymd('2020-03-13')
-most_popular$date_ref <- ymd('2020-03-13')
 
-# age of songs
-all_songs$days_since_release <- all_songs$date_ref-all_songs$track.album.release_date
-most_popular$days_since_release <- most_popular$date_ref-most_popular$track.album.release_date
-
-all_songs$days_since_release %<>% as.integer()
 most_popular$days_since_release %<>% as.integer()
 
 # all songs plot age
@@ -568,7 +631,7 @@ days_since_release_plot %>%
 
 # save dataset to clustering
 most_popular %>%
-  select(c(id, days_since_release, days_until_pop, days_from_pop_to_top, days_from_top_until_leave)) %>%
+  select(c(track.id, days_since_release, days_until_pop, days_from_pop_to_top, days_from_top_until_leave, days_of_populatiry)) %>%
   unique() %>%
-  write_csv("2.Datasets/clusterig_features.csv")
+  write_csv("2.Datasets/clusterig_features_v2.csv")
 

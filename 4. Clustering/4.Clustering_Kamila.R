@@ -16,9 +16,9 @@ library(factoextra) # clustering visualization
 library(caret)
 
 # read databases
-all_songs <- read_csv('2.Datasets/features.csv')
-most_popular <- read_csv('2.Datasets/most_popular.csv')
-clustering_features <- read_csv('2.Datasets/clusterig_features.csv')
+all_songs <- read_csv('2.Datasets/songs_features_v2.csv')
+most_popular <- read_csv('2.Datasets/most_popular_v2.csv')
+clustering_features <- read_csv('2.Datasets/clusterig_features_v2.csv')
 
 # encode factors features
 all_songs$time_signature %<>% as.factor()
@@ -32,10 +32,10 @@ most_popular$key %<>% as.factor()
 # encode date features
 all_songs$track.album.release_date %<>% as.Date()
 
-most_popular$date %<>% as.Date()
+most_popular$data %<>% as.Date()
 most_popular$track.album.release_date %<>% as.Date()
 
-most_popular$ano_mes <- as.yearmon(most_popular$date)
+most_popular$ano_mes <- as.yearmon(most_popular$data)
 most_popular$ano_mes %<>% factor(ordered = TRUE)
 
 # # create feature of days since release
@@ -52,18 +52,17 @@ most_popular$ano_mes %<>% factor(ordered = TRUE)
 
 # dataframe filtered
 songs_pop <- most_popular %>%
-  select(-c(date, mes, ano, ano_mes, Position)) %>% 
+  select(-c(data, mes, ano, ano_mes, Position)) %>% 
   unique() %>%
   drop_na()
 
 # join clustering features
-df <- songs_pop %>% left_join(clustering_features, by = 'id')
+df <- songs_pop %>% inner_join(clustering_features, by = 'track.id')
 
 # create dataframe with continuous features
 MP_continuous <- df %>%
-  select(-c('id', 'track.popularity','track.album.release_date',
-            'track.album.release_date_precision', 'key', 'mode',
-            'time_signature', 'track.album.id', 'track.album.release_date'))
+  select(-c('track.id', 'track.name','track.popularity','track.album.release_date', 'key', 'mode',
+            'time_signature'))
 
 # scale dataframe with continuous features
 MP_continuous %<>% 
@@ -80,7 +79,7 @@ model <- kamila(MP_continuous, MP_factors, numClust = 2 : 10, numInit = 10,
                  calcNumClust = "ps", numPredStrCvRun = 10, predStrThresh = 0.5)
 
 # join clustering features
-full_df <- songs_pop %>% left_join(clustering_features, by = 'id')
+full_df <- songs_pop %>% left_join(clustering_features, by = 'track.id')
 
 # label all songs in one of the existing one
 full_df$cluster <- model$finalMemb
@@ -88,7 +87,7 @@ MP_continuous$cluster <- model$finalMemb
 # MP_continuous$cluster <- model$finalMemb
 
 # number of songs per cluster
-table(full_df$cluster)
+table(full_df$cluster)/ nrow(full_df)
 
 # best number of clusters (prediction strength method)
 model$nClust$bestNClust
@@ -97,8 +96,7 @@ model$nClust$bestNClust
 
 # original scale
 clusters_mean <- full_df %>%
-  select(-c('id', 'track.album.release_date',
-            'track.album.release_date_precision', 'track.album.id')) %>%
+  select(-c('track.id', 'track.album.release_date')) %>%
   group_by(cluster) %>%
   summarise(size = n(),
             danceability_mean = mean(danceability),
@@ -144,54 +142,34 @@ normalized_clusters_mean <- MP_continuous %>%
   ) %>%
   round(2)
 
+# visualizing numerical centroids
+library(factoextra)
+fviz_cluster(list(data = MP_continuous[, -17], 
+                  cluster = MP_continuous$cluster), 
+             geom = "point",
+             ellipse.type = "convex",
+             main = "Projeção em duas dimensões dos segmentos")
+
 # create dataframe with continuous features removing features only present in pop songs
 df_numerical <- all_songs
 
 # create dataframe with continuous features
 df_numerical %<>%
-  select(-c('id', 'track.popularity','track.album.release_date',
-            'track.album.release_date_precision', 'key', 'mode',
-            'time_signature', 'track.album.id', 'track.album.release_date')) %>% 
+  select(-c('track.id', 'track.name', 'track.popularity','track.album.release_date',
+            'key', 'mode',  'time_signature', 'track.album.release_date')) %>% 
   scale() %>%
   data.frame()
 
 # create distances from clusters only with numerical features
-dist_obj <- classDist(MP_continuous[, 1:10], as.factor(MP_continuous[, 15]))
+dist_obj <- classDist(MP_continuous[, 1:11], as.factor(MP_continuous[, c("cluster")]))
 dist_matrix <- predict(dist_obj, df_numerical)
 
 all_songs[c('dist_c1', 'dist_c2', 'dist_c3', 'dist_c4')] <- dist_matrix
 
 modeling_final <- all_songs %>% 
-  select(-c('track.album.id', 'track.album.release_date', 'track.album.release_date_precision'))
+  select(-c('track.album.release_date', 'track.name'))
 
 modeling_final %<>% unique()
 
-# x <- model$finalCenters
-# x <- x[, 1:10]
-# n <- model$nClust$bestNClust
-# distances_df <- NULL
-# temp <- NULL
-# 
-# for (row in 1:nrow(df_numerical)) {
-#   # print(row)
-#   temp <- NULL
-#   
-#   y <- df_numerical %>% slice(row) %>% as.list()
-#   z <- dist(rbind(x, y)) %>% as.matrix()
-#   z <- z['y', 1:n]
-#   song_id <- all_songs %>%
-#     select(c('id')) %>% 
-#     slice(row)
-# 
-#   temp['id'] <- song_id
-#   temp[c('dist_c1', 'dist_c2', 'dist_c3', 'dist_c4')] <- z
-#   temp %<>% tbl_df()
-#   
-#   distances_df <- rbind(distances_df, temp)
-#   # print(nrow(distances_df))
-#   
-# }
-
-# save dataset to modeling
 modeling_final %>%
   write_csv("2.Datasets/modeling_final.csv")
