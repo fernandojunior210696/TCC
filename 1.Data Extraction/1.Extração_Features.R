@@ -1,4 +1,4 @@
-# 1. Extracting data base for 200 most popular songs
+# 1. Extracting data base for all songs
 # Last Generated: 2020-11-15
 
 # Install required packages (needed once only)
